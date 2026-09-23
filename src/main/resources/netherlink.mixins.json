@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.eyf.netherlink.fabric.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "PlayerAdvancementsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

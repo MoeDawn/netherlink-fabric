@@ -153,6 +153,23 @@ public class NetherLinkFabric implements ModInitializer {
         sendAsync(o);
     }
 
+    /**
+     * 玩家获得成就时的上报（由 {@code PlayerAdvancementsMixin} 调用）。
+     *
+     * <p>Fabric 没有现成的「玩家获得成就」事件，只能靠 mixin 注入——见那个类的注释。
+     * 过滤条件（配方解锁 / 根成就）在 mixin 里做，这里只负责发出去。
+     */
+    public void reportAdvancement(String player, String advancement, String key) {
+        JsonObject o = new JsonObject();
+        o.addProperty("type", "advancement");
+        o.addProperty("player", player);
+        o.addProperty("advancement", advancement);
+        // key 形如 "minecraft:story/mine_diamond"，与 Paper 端上报的字段一致
+        // （那边是 advancement.getKey().getKey()，不带命名空间；AstrBot 侧只用它做去重参考）
+        o.addProperty("advancement_key", key);
+        sendAsync(o);
+    }
+
     /** 网络发送切到 IO 线程，别占着服务端主线程。 */
     private void sendAsync(JsonObject payload) {
         final String json = payload.toString();
