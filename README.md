@@ -130,18 +130,35 @@ Fabric Loom `1.17-SNAPSHOT` 要求 Gradle **9.7+**，而本机装的是 9.1.0，
 
 ## 配置
 
-本模组**没有配置文件**——连接参数走 JVM 系统属性（在服务端的启动脚本里加）：
+首次启动会**自动生成** `config/netherlink.json`：
 
-| 属性 | 默认 | 说明 |
+| 键 | 默认 | 说明 |
 |---|---|---|
-| `netherlink.host` | `127.0.0.1` | AstrBot 侧 WS 服务端地址 |
-| `netherlink.port` | `8765` | 端口（须与 AstrBot 的 `ws_ports` 对应）|
-| `netherlink.token` | `change-me` | 必须与 AstrBot 的 `auth_token` 一致 |
+| `host` | `127.0.0.1` | AstrBot 侧 WS 服务端地址 |
+| `port` | `8765` | 端口（须与 AstrBot 的 `ws_ports` 对应）|
+| `token` | `change-me` | 必须与 AstrBot 的 `auth_token` 一致 |
+| `server-name` | `mc` | 本服务器标识（握手时上报）|
+| `wake-prefixes` | `ai,助手` | 游戏内唤醒词（逗号分隔）|
 
-例：`java -Dnetherlink.port=8766 -Dnetherlink.token=你的token -jar fabric-server.jar nogui`
+**键名与默认值与 Paper 端的 `config.yml` 逐字对齐**——换端时配置可以直接照搬。
 
-> ⚠️ 这是**临时实现**：Paper 端用的是 `config.yml`，Fabric 侧还没有。
-> 后续应换成 Fabric 的配置 API 以保持一致。
+### ⚠️ 为什么是 JSON 不是 YAML
+
+Paper 端用 `config.yml`（Bukkit 自带 YAML 支持），而 Fabric 侧**既没有 Bukkit
+也没有内置 YAML**——实测 MC 26.3 的 jar 与运行时 classpath 里**都没有 snakeyaml**
+（它只是 Gradle 构建期的传递依赖，不进服务端）。
+
+要读 YAML 就得自带 snakeyaml 并 shade 进 jar，多一个依赖与打包环节，收益只是
+「后缀好看」。改用 Fabric 本来就有的 Gson（MC 依赖里就有），零新依赖、零打包风险。
+**格式不同，语义与键名相同。**
+
+> ⚠️ JSON 不支持注释，所以说明放在 `_comment*` 字段里（加载时会忽略）。
+>
+> ⚠️ `wake-prefixes` 支持**中文全角分隔符**：全角逗号「，」、顿号「、」、
+> 分号「；」都会被归一化成半角逗号再切分——中文输入法下很容易打出这些，
+> 直接 `split(",")` 会把整串当成一个词。
+
+坏配置一律**回退默认值并记 warning**，绝不因为配置写错而崩掉服务端。
 
 ---
 
@@ -160,6 +177,7 @@ netherlink-fabric/
     │   ├── CommandCapture.java       # 指令输出 + 成败信号收集
     │   ├── LegacyText.java           # § 染色码解析
     │   ├── MainThreadExecutor.java   # 主线程调度
+    │   ├── NetherLinkConfig.java     # 配置（config/netherlink.json）
     │   └── mixin/
     │       └── PlayerAdvancementsMixin.java   # 成就上报（Fabric 无此事件）
     └── resources/
