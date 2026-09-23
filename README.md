@@ -112,7 +112,7 @@ cd netherlink-fabric
 ./build.cmd          # Windows
 ```
 
-产物：`build/libs/netherlink-fabric-0.1.0.jar`
+产物：`build/libs/netherlink-fabric-0.0.1.jar`
 
 ### ⚠️ 两件容易踩的事
 
