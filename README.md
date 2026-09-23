@@ -4,7 +4,7 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 
 **必须先装好 AstrBot 侧插件**，本模组才能工作（它是客户端，主动连入 AstrBot）。
 
-> 📌 另有 [Paper / Purpur / Folia 版](https://github.com/MoeDawn/netherlink-plugin-server)（`netherlink-plugin/` 目录）。
+> 📌 另有 [Paper / Purpur / Folia 版](https://github.com/MoeDawn/netherlink-plugin)（`netherlink-plugin/` 目录）。
 > 两个版本**协议完全相同**，接同一个 AstrBot 插件，服务端不用改配置。
 
 ---

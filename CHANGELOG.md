@@ -1,13 +1,13 @@
 # 更新日志
 
 > 本文件用于 GitHub Release 的说明。格式参考另外两个端
-> （`netherlink-plugin-server` 的 `CHANGELOG.md`、`astrbot_plugin_netherlink` 的同名文件）。
+> （`netherlink-plugin` 的 `CHANGELOG.md`、`astrbot_plugin_netherlink` 的同名文件）。
 
 ## v0.0.1
 
 Fabric 版**首个版本**。
 
-⚠️ 版本号与另外两端**独立**（Paper 端 `netherlink-plugin-server` 是 0.1.0，
+⚠️ 版本号与另外两端**独立**（Paper 端 `netherlink-plugin` 是 0.1.0，
 AstrBot 插件是 0.1.0）——Fabric 是全新的第三个成品，从 0.0.1 起算。
 
 ### 功能
