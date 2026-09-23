@@ -55,8 +55,10 @@ public class NetherLinkFabric implements ModInitializer {
     private AstrBotWsClient wsClient;
     private MinecraftServer server;
 
-    /** 游戏内机器人唤醒词（与 AstrBot 侧 mc_wake_prefixes 一致）。 */
-    private final java.util.List<String> wakePrefixes = new java.util.ArrayList<>(java.util.List.of("ai", "助手"));
+    /** 游戏内机器人唤醒词，从配置读（与 AstrBot 侧 mc_wake_prefixes 一致）。
+     *  ⚠️ 此前是硬编码的 ["ai","助手"]——那意味着用户在配置里改唤醒词对 Fabric 端
+     *  完全无效，而 Paper 端是从配置读的。本次配置统一时一并修掉。 */
+    private java.util.List<String> wakePrefixes = java.util.List.of();
 
     /** 待回执的指令：id -> 输出收集器。 */
     private final java.util.Map<String, CommandCapture> pendingCommands = new java.util.concurrent.ConcurrentHashMap<>();
@@ -69,12 +71,17 @@ public class NetherLinkFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(srv -> {
             this.server = srv;
             mainThread.bind(srv);
-            String host = System.getProperty("netherlink.host", "127.0.0.1");
-            int port = Integer.getInteger("netherlink.port", 8765);
-            String token = System.getProperty("netherlink.token", "change-me");
-            wsClient = new AstrBotWsClient(LOGGER, mainThread, host, port, token);
+
+            // 配置从文件读（config/netherlink.json），与 Paper 端的 config.yml
+            // 键名与默认值逐字对齐——见 NetherLinkConfig 的类注释。
+            NetherLinkConfig cfg = NetherLinkConfig.load(
+                    net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir());
+
+            this.wakePrefixes = parsePrefixes(cfg.wakePrefixesRaw);
+            wsClient = new AstrBotWsClient(LOGGER, mainThread, cfg.host, cfg.port, cfg.token);
             wsClient.connect();
-            LOGGER.info("NetherLink(Fabric) 已启用，目标 AstrBot: {}:{}", host, port);
+            LOGGER.info("NetherLink(Fabric) 已启用，目标 AstrBot: {}:{}（唤醒词: {}，服务器标识: {}）",
+                    cfg.host, cfg.port, wakePrefixes, cfg.serverName);
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(srv -> {
@@ -87,6 +94,32 @@ public class NetherLinkFabric implements ModInitializer {
         registerPlayerEvents();
         registerChatEvents();
         registerDeathEvents();
+    }
+
+    /**
+     * 解析逗号分隔的唤醒词。
+     *
+     * <p>⚠️ 与 AstrBot 插件侧一样要处理**中文全角分隔符**：中文输入法下打出的
+     * 常是全角逗号「，」或顿号「、」，直接 split(",") 会把整串当成一个词。
+     * AstrBot 侧统一走 `_SEPARATORS` 归一化，这里做等价的处理。
+     */
+    static java.util.List<String> parsePrefixes(String raw) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (raw == null || raw.isBlank()) {
+            return out;
+        }
+        String normalized = raw
+                .replace('，', ',').replace('、', ',')
+                .replace('；', ',').replace(';', ',')
+                .replace('　', ',')   // 全角空格
+                .replace('：', ':');
+        for (String p : normalized.split(",")) {
+            String s = p.strip();
+            if (!s.isEmpty()) {
+                out.add(s);
+            }
+        }
+        return out;
     }
 
     /** 进服 / 退服。 */
