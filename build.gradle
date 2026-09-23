@@ -1,0 +1,72 @@
+// NetherLink MC 端 · Fabric 版
+//
+// ⚠️ 这份 build.gradle 的写法**照抄 Fabric 官方示例模组的 26.3 分支**
+// （github.com/FabricMC/fabric-example-mod 的 `26.3` 分支），不是凭空写的。
+// 三个容易踩错的点，都是实测出来的：
+//
+// 1. **插件 id 是 `net.fabricmc.fabric-loom`**（不是 `-remap` 那个）。
+//    去混淆版（MC 26.1+）走的是 Loom 的新架构，两者不通用。
+// 2. **版本写 `1.17-SNAPSHOT`**：这是 Fabric 为去混淆版新发的 Loom 线。
+//    数字看起来比 1.18.2 小，但**发布版 1.18.2 反而不支持 26.3**
+//    （实测报 "Failed to set up Minecraft"）。
+// 3. **完全不声明 `mappings`**：MC 26.1 起不再混淆，类名本来就是可读的
+//    Mojang 名字，无需映射层。写了 `loom.officialMojangMappings()` 会报
+//    "Failed to find official mojang mappings for 26.3"——因为 Mojang 从
+//    26.1 起就不再发布 client_mappings，Yarn 也已停止维护。
+//
+// 版本号在 gradle.properties 里。
+
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+	// ⚠️ 去混淆版用 `implementation` 而不是 `modImplementation`（官方模板如此）
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// Fabric API：事件注册（聊天 / 进服退服 / 死亡）要用它的几个模块
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	// MC 26.3 需要 Java 25（与 Paper 端一致）
+	it.options.release = 25
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	// MIT 要求「在所有副本中包含许可声明」，把仓库根目录的 LICENSE 打进 jar
+	from("LICENSE") {
+		rename { "${it}_$projectName" }
+	}
+}
+
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+	repositories {
+	}
+}
