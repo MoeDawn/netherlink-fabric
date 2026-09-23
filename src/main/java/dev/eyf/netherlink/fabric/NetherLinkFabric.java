@@ -158,9 +158,11 @@ public class NetherLinkFabric implements ModInitializer {
         final String json = payload.toString();
         mainThread.executeAsync(() -> {
             AstrBotWsClient c = wsClient;
-            if (c != null) {
-                c.send(json);
+            if (c == null) {
+                LOGGER.warn("WS 客户端未就绪，丢弃消息: {}", json.substring(0, Math.min(60, json.length())));
+                return;
             }
+            c.send(json);
         });
     }
 
@@ -217,12 +219,13 @@ public class NetherLinkFabric implements ModInitializer {
         CommandCapture capture = new CommandCapture();
         try {
             var source = server.createCommandSourceStack()
-                    .withSource(capture)
+                    .withSource(capture)    // ① 收指令输出文本
+                    .withCallback(capture)  // ② 收成功/失败信号（文本那路不区分成败）
                     .withPermission(net.minecraft.server.permissions.PermissionSet.ALL_PERMISSIONS);
             server.getCommands().performPrefixedCommand(source, cmd);
-            // 原版指令「成功但无输出」很常见（tp / kill 等），那不是失败。
-            // 只有**捕获到失败反馈**才算失败。
-            sendCommandResult(id, !capture.sawFailure(), capture.text());
+            // 「执行了但无输出」是正常成功（tp / kill / say 都不给执行者反馈），
+            // 不能把 output 为空当成失败——成败只看 capture 收到的信号。
+            sendCommandResult(id, capture.ok(), capture.text());
         } catch (Exception e) {
             // 抛异常 = 明确失败。必须如实上报，否则 AstrBot 侧会当成功照扣好感
             // （Paper 端踩过：那边曾无条件报 ok=true）。

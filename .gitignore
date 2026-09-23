@@ -3,3 +3,5 @@ build/
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 run/
+probe_server.py
+probe_result.json

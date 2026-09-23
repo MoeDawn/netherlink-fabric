@@ -9,18 +9,31 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 
 ---
 
-## ⚠️ 当前状态：**骨架阶段，尚不可用**
+## 状态
 
-本工程目前**只验证了构建链**，功能代码还没写。
-
-| 项 | 状态 |
+| 功能 | 状态 |
 |---|---|
-| Gradle 构建链（MC 26.3 + Fabric Loom + Fabric API） | ✅ **已跑通** |
-| WebSocket 客户端（连接/重连/心跳） | ⬜ 未开始 |
-| 事件上报（聊天 / 进服退服 / 死亡 / 成就） | ⬜ 未开始 |
-| 下行广播与指令执行 | ⬜ 未开始 |
+| WebSocket 连接 / 握手 / 指数退避重连 / 心跳 | ✅ 已实现，**实机验证过** |
+| 指令执行 + **输出捕获** + `ok` 语义 | ✅ 已实现，**实机验证过**（见下） |
+| 聊天上报（含唤醒词分流 `bot_chat`） | ✅ 已实现 |
+| 进服 / 退服上报 | ✅ 已实现 |
+| 死亡上报 | ✅ 已实现 |
+| **成就上报** | ⬜ **未实现**——Fabric 没有「玩家获得成就」事件（`AdvancementEvents` 是构建/加载成就用的，不是 grant），需要 mixin 或刮 `GAME_MESSAGE` |
 
-**别把它装到生产服上**——现在加载后只会往日志打一行「骨架加载成功」。
+> ⚠️ 除指令执行外，事件类功能**只做了编译验证，没有跑过真人进服/聊天/死亡的端到端**。
+> 上手前建议先在测试服上跑一轮。
+
+### 指令执行：实机验证结果
+
+在真 Fabric 26.3 服务端 + 独立 WS 探针上实测（5 条指令全过，**结果与 Paper 端逐一对照一致**）：
+
+| 指令 | `ok` | 捕获到的输出 |
+|---|---|---|
+| `list` | true | `There are 0 of a max of 20 players online:` |
+| `time set day` | true | `Set minecraft:overworld to time marker minecraft:day` |
+| `give @a apple 1` | true | `No player was found`（指令确实执行了）|
+| `nonexistentcommand123` | **false** | `Unknown or incomplete command...` |
+| `say 测试广播` | true | （空输出，但确实执行了并广播成功）|
 
 ---
 
@@ -85,21 +98,59 @@ Fabric Loom `1.17-SNAPSHOT` 要求 Gradle **9.7+**，而本机装的是 9.1.0，
 
 ---
 
+## 配置
+
+本模组**没有配置文件**——连接参数走 JVM 系统属性（在服务端的启动脚本里加）：
+
+| 属性 | 默认 | 说明 |
+|---|---|---|
+| `netherlink.host` | `127.0.0.1` | AstrBot 侧 WS 服务端地址 |
+| `netherlink.port` | `8765` | 端口（须与 AstrBot 的 `ws_ports` 对应）|
+| `netherlink.token` | `change-me` | 必须与 AstrBot 的 `auth_token` 一致 |
+
+例：`java -Dnetherlink.port=8766 -Dnetherlink.token=你的token -jar fabric-server.jar nogui`
+
+> ⚠️ 这是**临时实现**：Paper 端用的是 `config.yml`，Fabric 侧还没有。
+> 后续应换成 Fabric 的配置 API 以保持一致。
+
+---
+
 ## 目录结构
 
 ```text
 netherlink-fabric/
-├── build.gradle               # ⚠️ 去混淆版的写法，见上文
-├── gradle.properties          # 版本号都在这儿
-├── settings.gradle
-├── build.cmd                  # ⚠️ 纯 ASCII，用 wrapper
-├── gradlew / gradlew.bat      # Gradle wrapper（9.7.1）
+├── build.gradle                      # ⚠️ 去混淆版的写法，见上文
+├── gradle.properties                 # 版本号都在这儿
+├── build.cmd                         # ⚠️ 纯 ASCII，用 wrapper
+├── gradlew / gradlew.bat             # Gradle wrapper（9.7.1）
 └── src/main/
     ├── java/dev/eyf/netherlink/fabric/
-    │   └── NetherLinkFabric.java
-    └── resources/
-        └── fabric.mod.json
+    │   ├── NetherLinkFabric.java     # 主类：事件注册 + 下行处理
+    │   ├── AstrBotWsClient.java      # WS 客户端（纯 JDK）
+    │   ├── CommandCapture.java       # 指令输出 + 成败信号收集
+    │   ├── LegacyText.java           # § 染色码解析
+    │   └── MainThreadExecutor.java   # 主线程调度
+    └── resources/fabric.mod.json
 ```
+
+---
+
+## 与 Paper 端的实现差异（都踩过）
+
+| 关注点 | Paper 版 | Fabric 版 |
+|---|---|---|
+| 事件注册 | `Bukkit.getPluginManager()` | Fabric API 静态事件总线 |
+| 调度器 | Bukkit 调度器（tick 单位）| JDK `ScheduledExecutorService`（时间单位，免换算）|
+| 指令执行 | `Bukkit.createCommandSender` + `dispatchCommand`（返回 boolean）| `createCommandSourceStack().withSource().withCallback()` + `performPrefixedCommand`（**返回 void**）|
+| `ok` 判据 | `dispatchCommand` 的返回值 | **`CommandResultCallback.onResult` 有没有被调用过** |
+| § 码渲染 | Adventure `LegacyComponentSerializer` | 自己写解析（原版 `Component` API 没有 legacy 反序列化）|
+| 成就上报 | `PlayerAdvancementDoneEvent` | **没有对应事件**，未实现 |
+
+> ⚠️ **`ok` 的判据是本次最反直觉的一处**：原版 `onResult(wasSuccess, ...)` 的
+> `wasSuccess` 语义与 AstrBot 需要的「指令有没有被执行」**不一致**——实测
+> `give @a apple 1`（没人在线）原版报 `false`，但 Paper 端报 `true`。
+> 取「回调有没有被调用」才能与 Paper 端对齐：**被调用 ⟺ 指令通过了 Brigadier
+> 解析并进入执行**；解析失败时原版直接返回，根本不通知 callback。
 
 ---
 
