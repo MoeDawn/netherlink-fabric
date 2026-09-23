@@ -18,10 +18,40 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 | 聊天上报（含唤醒词分流 `bot_chat`） | ✅ 已实现 |
 | 进服 / 退服上报 | ✅ 已实现 |
 | 死亡上报 | ✅ 已实现 |
-| **成就上报** | ⬜ **未实现**——Fabric 没有「玩家获得成就」事件（`AdvancementEvents` 是构建/加载成就用的，不是 grant），需要 mixin 或刮 `GAME_MESSAGE` |
+| 成就上报 | ✅ 已实现，**端到端验证过**（mixin 注入，见下）|
 
-> ⚠️ 除指令执行外，事件类功能**只做了编译验证，没有跑过真人进服/聊天/死亡的端到端**。
-> 上手前建议先在测试服上跑一轮。
+> ⚠️ 除指令执行与成就上报外，聊天 / 进退服 / 死亡**只做了编译验证，
+> 没跑过真人进服 / 聊天 / 死亡的端到端**。上手前建议先在测试服上跑一轮。
+
+### 成就上报：为什么要 mixin
+
+Fabric API **没有**「玩家获得成就」事件——`AdvancementEvents` 只有
+REPLACE / MODIFY / ALL_LOADED，那是用来**构建与加载**成就定义用的，不是 grant。
+
+所以本模组用 **mixin** 注入 `PlayerAdvancements.award(AdvancementHolder, String)`。
+注入点刻意不选「成就播报的聊天消息」（`GAME_MESSAGE`）：那条路上
+「是不是成就、是哪个成就」得**解析本地化文本**反推，多语言环境下必然出错；
+`award` 能直接拿到 `AdvancementHolder`。
+
+过滤条件（与 Paper 端逐条对齐）：
+1. `award` 返回 false → 跳过（未真正新授予）
+2. id 含 `:recipes/` → 跳过（配方解锁，合成一次就通知一次）
+3. `display()` 为空 → 跳过（根成就，是分类标题不是玩家感知的成就）
+4. `progress.isDone()` 为假 → 跳过
+
+> ⚠️ 第 4 条容易误判：**`award` 对每个判据都会调一次**，而「获得成就」的语义是
+> **整体完成**。多判据成就（如 `adventuring_time` 需访问所有生物群系）授予单个
+> 判据时 `isDone` 仍为假——这是设计，不是 bug。
+
+**实机验证结果**：
+
+```
+服务端: [mixin-probe] award 回调触发 hook=minecraft:adventure/arbalistic ret=true
+探针:   ★ 成就上报: player=AdvProbeBot advancement=[Arbalistic] key=minecraft:adventure/arbalistic
+```
+
+（验证用的临时调试入口已移除，并重跑确认移除后服务端仍能启动——
+mixin 配的是 `required: true`，注入点写错会直接崩。）
 
 ### 指令执行：实机验证结果
 
@@ -129,8 +159,12 @@ netherlink-fabric/
     │   ├── AstrBotWsClient.java      # WS 客户端（纯 JDK）
     │   ├── CommandCapture.java       # 指令输出 + 成败信号收集
     │   ├── LegacyText.java           # § 染色码解析
-    │   └── MainThreadExecutor.java   # 主线程调度
-    └── resources/fabric.mod.json
+    │   ├── MainThreadExecutor.java   # 主线程调度
+    │   └── mixin/
+    │       └── PlayerAdvancementsMixin.java   # 成就上报（Fabric 无此事件）
+    └── resources/
+        ├── fabric.mod.json
+        └── netherlink.mixins.json
 ```
 
 ---
@@ -144,7 +178,7 @@ netherlink-fabric/
 | 指令执行 | `Bukkit.createCommandSender` + `dispatchCommand`（返回 boolean）| `createCommandSourceStack().withSource().withCallback()` + `performPrefixedCommand`（**返回 void**）|
 | `ok` 判据 | `dispatchCommand` 的返回值 | **`CommandResultCallback.onResult` 有没有被调用过** |
 | § 码渲染 | Adventure `LegacyComponentSerializer` | 自己写解析（原版 `Component` API 没有 legacy 反序列化）|
-| 成就上报 | `PlayerAdvancementDoneEvent` | **没有对应事件**，未实现 |
+| 成就上报 | `PlayerAdvancementDoneEvent` | **没有对应事件**，用 mixin 注入 `PlayerAdvancements.award` |
 
 > ⚠️ **`ok` 的判据是本次最反直觉的一处**：原版 `onResult(wasSuccess, ...)` 的
 > `wasSuccess` 语义与 AstrBot 需要的「指令有没有被执行」**不一致**——实测
