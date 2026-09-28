@@ -24,6 +24,17 @@ public final class AstrBotWsClient implements WebSocket.Listener {
     private final Logger logger;
     private final URI uri;
     private final String token;
+    /**
+     * 握手时上报的服务器标识。
+     *
+     * <p>⚠️ 以前这里引用的是 {@code NetherLinkFabric.SERVER_NAME} 那个写死的常量
+     * {@code "mc"}——于是 {@code config/netherlink.json} 里的 {@code server-name}
+     * 配了也没用（读进来了、日志也打了，唯独握手处没用它）。
+     * 多服场景下每台服都上报 {@code mc}，而 AstrBot 侧在 {@code ws_ports} 只填
+     * 裸端口时**正是靠这个上报名区分服务器**，于是两台服会互相顶掉连接。
+     * 现在按 Paper / NeoForge 端的做法，从配置传进来。
+     */
+    private final String serverName;
     private final HttpClient http;
     /** 回调进游戏主线程用（操作世界/玩家必须在服务端线程上）。 */
     private final MainThreadExecutor mainThread;
@@ -39,10 +50,12 @@ public final class AstrBotWsClient implements WebSocket.Listener {
     private volatile boolean shuttingDown = false;
     private volatile int retryDelay = 3; // 秒，指数退避：3 -> 6 -> 12 -> 24 -> 48（上限 60）
 
-    public AstrBotWsClient(Logger logger, MainThreadExecutor mainThread, String host, int port, String token) {
+    public AstrBotWsClient(Logger logger, MainThreadExecutor mainThread,
+                           String host, int port, String token, String serverName) {
         this.logger = logger;
         this.mainThread = mainThread;
         this.token = token;
+        this.serverName = serverName;
         this.uri = URI.create("ws://" + host + ":" + port + "/ws");
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
@@ -94,7 +107,7 @@ public final class AstrBotWsClient implements WebSocket.Listener {
                     retryDelay = 3; // 连上后重置退避
                     // 握手：token 校验由 AstrBot 侧完成，失败会被对方关闭
                     ws.sendText("{\"type\":\"hello\",\"token\":\"" + token
-                            + "\",\"server_name\":\"" + NetherLinkFabric.SERVER_NAME + "\"}", true);
+                            + "\",\"server_name\":\"" + serverName + "\"}", true);
                     logger.info("已连接 AstrBot，握手已发送");
                     startHeartbeat();
                 });

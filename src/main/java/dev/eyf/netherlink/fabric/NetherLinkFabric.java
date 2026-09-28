@@ -41,8 +41,7 @@ import org.slf4j.LoggerFactory;
 public class NetherLinkFabric implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("NetherLink");
-    /** 与 AstrBot 握手时上报的服务器标识（显示名不在本端控制，由 AstrBot 的
-     *  {@code server_display_names} 决定）。 */
+    /** 与 AstrBot 握手时上报的服务器标识**兜底值**；实际取配置 {@code server-name}。 */
     public static final String SERVER_NAME = "mc";
 
     /** 当前实例。Fabric 的主类由框架构造，事件回调里拿不到 this，故留一个静态引用。 */
@@ -78,7 +77,12 @@ public class NetherLinkFabric implements ModInitializer {
                     net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir());
 
             this.wakePrefixes = parsePrefixes(cfg.wakePrefixesRaw);
-            wsClient = new AstrBotWsClient(LOGGER, mainThread, cfg.host, cfg.port, cfg.token);
+            // ⚠️ serverName 必须传**配置里的**，不能传写死的常量 SERVER_NAME：
+            // AstrBot 侧在 ws_ports 只填裸端口时，就是靠这个上报名区分服务器
+            // （见 main.py 的 `server_id = bound_id or reported`）。传常量的话
+            // 多服会全部自称 "mc"，互相顶掉连接。Paper 端一直用的是配置。
+            wsClient = new AstrBotWsClient(LOGGER, mainThread,
+                    cfg.host, cfg.port, cfg.token, cfg.serverName);
             wsClient.connect();
             LOGGER.info("NetherLink(Fabric) 已启用，目标 AstrBot: {}:{}（唤醒词: {}，服务器标识: {}）",
                     cfg.host, cfg.port, wakePrefixes, cfg.serverName);
