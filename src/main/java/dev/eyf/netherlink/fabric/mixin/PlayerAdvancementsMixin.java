@@ -65,9 +65,13 @@ public abstract class PlayerAdvancementsMixin {
             if (key.contains(":recipes/") || key.startsWith("recipes/")) {
                 return;
             }
-            // ② 根成就是分类的「标题」（如 "story/root"），display 为 absent。
-            //    它不是玩家感知的成就，报上去只会让 AI 无意义地加好感。
-            if (holder.value().display().isEmpty()) {
+            // ② 根成就是分类的**页签标题**（如 "story/root"），不是玩家感知的成就，
+            //    报上去只会让 AI 无意义地加好感。
+            //    ⚠️ 判据是「**有没有父成就**」，**不是**「display 是否为空」——
+            //    实测（2026-09-28，NeoForge 端跑真服验证）：`minecraft:story/root`
+            //    **是有 display 的**，那正是成就页签的图标与标题，所以 display 判据
+            //    根本过滤不掉它。NeoForge 端实测收到了 `key='minecraft:story/root'`。
+            if (holder.value().parent().isEmpty()) {
                 return;
             }
 
