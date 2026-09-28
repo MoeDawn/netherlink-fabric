@@ -35,7 +35,7 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 ## 安装
 
 1. **下载 Release**
-   从 [Releases](https://github.com/MoeDawn/netherlink-fabric/releases) 下载 `netherlink-fabric-0.0.1.jar`
+   从 [Releases](https://github.com/MoeDawn/netherlink-fabric/releases) 下载 `netherlink-fabric-0.0.2.jar`
 
 2. **放入服务端**
    把 jar 放进服务器的 `mods/` 目录（同时需要 Fabric API），重启服务器
@@ -112,7 +112,7 @@ cd netherlink-fabric
 ./build.cmd          # Windows
 ```
 
-产物：`build/libs/netherlink-fabric-0.0.1.jar`
+产物：`build/libs/netherlink-fabric-0.0.2.jar`
 
 ---
 

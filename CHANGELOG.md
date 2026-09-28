@@ -2,9 +2,9 @@
 
 > 本文件用于 GitHub Release 的说明。格式参考另外两端的 `CHANGELOG.md`。
 
-## 未发布
+## v0.0.2
 
-> ⚠️ 下面这项**已修复但尚未发版**——等确定版本号时把本小节标题改成正式版本号即可。
+NetherLink 的 MC 端 **Fabric** 模组——配套 AstrBot 上的 NetherLink 插件使用。
 
 ### 修复
 
