@@ -31,6 +31,25 @@ dependencies {
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 }
 
+// ⚠️ **这两个 run 配置只为测试**（模组本身是服务端的，客户端不加载它）。
+// 目的：让本机起一个**真实客户端**连进测试服，从而能造出
+// 聊天 / 进服 / 退服 / 死亡 这些**必须有真玩家在线**才能触发的事件
+// （这些此前一直是「仅编译验证」）。NeoForge 端就是这么验的。
+//
+// ⚠️ 客户端与服务端**必须用不同的运行目录**：共用时两个进程会同时往同一个
+// logs/latest.log 写，日志被拼成断行（实测踩到）。
+loom {
+	runs {
+		client {
+			client()
+			configName = 'TestClient'
+			runDir 'run-test-client'
+			programArgs '--username', 'FabProbe',
+					'--quickPlayMultiplayer', '127.0.0.1:25565'
+		}
+	}
+}
+
 processResources {
 	def version = project.version
 	inputs.property "version", version

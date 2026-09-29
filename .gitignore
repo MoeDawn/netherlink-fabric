@@ -5,3 +5,15 @@ build/
 run/
 probe_server.py
 probe_result.json
+
+# 测试脚本（本机开发用，与另两端的处理一致）
+run_e2e.py
+probe_result_fabric.json
+client_run.log
+server_run.log
+shot_*.png
+__pycache__/
+*.pyc
+driver.log
+probe_run.log
+run-test-client/
