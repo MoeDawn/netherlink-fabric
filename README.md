@@ -62,11 +62,11 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 |---|---|
 | `host` / `port` | AstrBot 侧监听的 WebSocket 地址与端口 |
 | `token` | 握手鉴权密钥，两侧必须一致 |
-| `server-name` | 本服务器的**身份**，握手时上报。AstrBot 侧的 `ws_ports` / `server_display_names` 用它区分与命名各台服务器（不影响显示名） |
+| `server-name` | 本服务器的**身份**，握手时上报。AstrBot 侧用它区分各台服务器。它**不是**显示名 |
 | `wake-prefixes` | 游戏内唤醒词，**须与 AstrBot 侧 `mc_wake_prefixes` 一致**否则唤不醒 AI |
 
-> `server-name` 是身份，**显示名不在这里控制**——QQ 群前缀、`{server}` 占位符、
-> AI 上下文里的服务器名统一由 AstrBot 侧的 `server_display_names` 决定（没配则显示 `MC`）。
+> 显示名不在这里控制——QQ 群前缀、`{server}` 占位符、AI 上下文里的服务器名
+> 统一由 AstrBot 侧的 `ws_ports` 决定，取冒号前那段（没配则显示 `MC`）。
 
 **键名与默认值与 Paper 端的 `config.yml` 逐字对齐**——换端时配置可以直接照搬。
 
