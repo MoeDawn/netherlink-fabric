@@ -12,8 +12,11 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 |---|---|
 | 游戏 → QQ | 聊天 / 进服 / 退服 / 死亡推送到群；唤醒词开头的话作为对话交给 AI |
 | 成就上报 | 玩家获得成就时通知 AI（已过滤配方解锁与根成就） |
-| QQ → 游戏 | 群消息渲染 § 染色码后广播到公屏 |
+| QQ → 游戏 | 群消息渲染 § 染色码后广播到公屏；播报里提到的物品可悬停看详情 |
 | 指令执行 | 以控制台身份执行 AI 下发的指令，并把服务器**真实输出**回传给 AI |
+| 动作确认卡 | 给物品 / 交换 / 升级 / 改物品 / 传送先发可点击卡片，点「确认」才执行（材料不够整体中止；改物品保留原有组件） |
+| 查背包 | AI 改 / 换 / 送东西前先查你身上有什么（只读、不扣好感） |
+| 本地菜单 | 公屏发 `菜单` 弹出可点击菜单：传送到玩家、传送死亡点、展示手上的物品（不经 AstrBot、离线可用） |
 
 ---
 
@@ -32,7 +35,7 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 ## 安装
 
 1. **下载 Release**
-   从 [Releases](https://github.com/MoeDawn/netherlink-fabric/releases) 下载 `netherlink-fabric-0.0.3.jar`
+   从 [Releases](https://github.com/MoeDawn/netherlink-fabric/releases) 下载 `netherlink-fabric-0.0.4.jar`
 
 2. **放入服务端**
    把 jar 放进服务器的 `mods/` 目录（同时需要 Fabric API），重启服务器
@@ -64,6 +67,10 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 | `token` | 握手鉴权密钥，两侧必须一致 |
 | `server-name` | 本服务器的**身份**，握手时上报。AstrBot 侧用它区分各台服务器。它**不是**显示名 |
 | `wake-prefixes` | 游戏内唤醒词，**须与 AstrBot 侧 `mc_wake_prefixes` 一致**否则唤不醒 AI |
+| `menu-enable` | 本地菜单总开关。关掉后触发词不生效，那条话照常作为聊天上报 |
+| `menu-triggers` | 菜单触发词（逗号分隔）。**整条消息**等于其中之一才触发 |
+| `menu-title` / `menu-item-*` | 菜单抬头与各菜单项的名字 |
+| `menu-teleport-cooldown` | 菜单动作冷却（秒）：传送与展示共用，防连点。0 = 无冷却 |
 
 > 显示名不在这里控制——QQ 群前缀、`{server}` 占位符、AI 上下文里的服务器名
 > 统一由 AstrBot 侧的 `ws_ports` 决定，取冒号前那段（没配则显示 `MC`）。
@@ -95,6 +102,10 @@ Minecraft **Fabric** 服务端模组，与 [AstrBot 侧的 NetherLink 插件](ht
 | 配置生成与生效 | ✅ 已验证 |
 | 进服 / 退服 / 死亡上报 | ✅ 已验证 |
 | QQ → 游戏广播（§ 染色码渲染） | ✅ 已验证 |
+| 动作确认卡（渲染 + 点击执行） | ✅ 已验证（真客户端探针） |
+| 查背包（组件序列化） | ✅ 已验证（真客户端探针） |
+| 结构化播报（物品悬停） | ✅ 已验证 |
+| 本地菜单（传送 / 死亡点 / 展示） | ⚠️ 已实现，点击链路待真人验证 |
 | 玩家聊天上报（含唤醒词分流） | ⚠️ 已实现，仅编译验证 |
 
 > ⚠️ **玩家聊天**目前只做了编译验证。它是唯一没法用控制台指令模拟的事件，
@@ -114,7 +125,7 @@ cd netherlink-fabric
 ./build.cmd          # Windows
 ```
 
-产物：`build/libs/netherlink-fabric-0.0.3.jar`
+产物：`build/libs/netherlink-fabric-0.0.4.jar`
 
 ---
 
