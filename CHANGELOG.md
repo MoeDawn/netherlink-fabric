@@ -2,7 +2,7 @@
 
 > 本文件用于 GitHub Release 的说明。格式参考另外两端的 `CHANGELOG.md`。
 
-## v0.1.0
+## v0.0.4
 
 NetherLink 的 MC 端 **Fabric** 模组——配套 AstrBot 上的 NetherLink 插件使用。
 
