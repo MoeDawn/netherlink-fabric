@@ -62,6 +62,15 @@ public class NetherLinkFabric implements ModInitializer {
     /** 待回执的指令：id -> 输出收集器。 */
     private final java.util.Map<String, CommandCapture> pendingCommands = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** 动作层（确认卡 + steps 执行 + 点击回调）。SERVER_STARTED 后非 null。 */
+    private ActionFlow actionFlow;
+    /** 查背包（inspect）。 */
+    private InspectFlow inspectFlow;
+    /** 本地菜单。 */
+    private MenuFlow menuFlow;
+    /** 物品基石（解析 id[组件] / 槽位 / 计数 / 合并）。 */
+    private ItemTool itemTool;
+
     @Override
     public void onInitialize() {
         INSTANCE = this;
@@ -77,6 +86,11 @@ public class NetherLinkFabric implements ModInitializer {
                     net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir());
 
             this.wakePrefixes = parsePrefixes(cfg.wakePrefixesRaw);
+            this.itemTool = new ItemTool(srv);
+            this.actionFlow = new ActionFlow(srv, itemTool);
+            this.inspectFlow = new InspectFlow(srv);
+            this.menuFlow = new MenuFlow(srv, actionFlow, itemTool);
+            applyMenuConfig(cfg);
             // ⚠️ serverName 必须传**配置里的**，不能传写死的常量 SERVER_NAME：
             // AstrBot 侧在 ws_ports 只填裸端口时，就是靠这个上报名区分服务器
             // （见 main.py 的 `server_id = bound_id or reported`）。传常量的话
@@ -136,6 +150,9 @@ public class NetherLinkFabric implements ModInitializer {
             // ⚠️ 用 handler.player 而不是「遍历找离线的玩家」：断开时玩家可能
             // 已经从玩家列表里移除，只有 handler 上还挂着引用。
             ServerPlayer p = handler.player;
+            if (menuFlow != null) {
+                menuFlow.onQuit(p);
+            }
             report("leave", p.getScoreboardName());
         });
     }
@@ -147,6 +164,11 @@ public class NetherLinkFabric implements ModInitializer {
             // decoratedContent 是**渲染后**的文本（含队伍前缀等）；signedContent 是玩家输入的原文。
             // 这里取原文：与 Paper 端行为一致（那边取的是 AsyncChatEvent 的 message()）。
             String text = message.signedContent();
+            // ---- 本地菜单优先（整条相等，排在唤醒词之前；触发后就地消费不上报）----
+            if (menuFlow != null && menuFlow.isTrigger(text)) {
+                mainThread.execute(() -> menuFlow.openMainMenu(sender));
+                return;
+            }
             for (String prefix : wakePrefixes) {
                 if (text.startsWith(prefix)) {
                     JsonObject o = new JsonObject();
@@ -208,7 +230,7 @@ public class NetherLinkFabric implements ModInitializer {
     }
 
     /** 网络发送切到 IO 线程，别占着服务端主线程。 */
-    private void sendAsync(JsonObject payload) {
+    void sendAsync(JsonObject payload) {
         final String json = payload.toString();
         mainThread.executeAsync(() -> {
             AstrBotWsClient c = wsClient;
@@ -230,6 +252,12 @@ public class NetherLinkFabric implements ModInitializer {
             switch (type) {
                 case "chat", "bot_reply" -> broadcastLine(data);
                 case "command" -> runCommand(data);
+                case "action_offer" -> {
+                    if (actionFlow != null) actionFlow.handleActionOffer(data);
+                }
+                case "inspect" -> {
+                    if (inspectFlow != null) inspectFlow.handleInspect(data);
+                }
                 default -> {
                     // hello 应答 / 未知类型，忽略
                 }
@@ -241,12 +269,79 @@ public class NetherLinkFabric implements ModInitializer {
 
     /** 下行整行文本：AstrBot 已渲染好（含 § 染色码），这里解析后广播。 */
     private void broadcastLine(JsonObject data) {
+        // `parts` 是**结构化**的那份（可选）：物品能染色 + 带 show_item 悬停；
+        // 没有就照旧吃 legacy 文本（向后兼容，推群模板 / 别的发送方都不带 parts）。
+        if (data.has("parts")) {
+            renderParts(data.getAsJsonArray("parts"));
+            return;
+        }
         String line = data.has("line") ? data.get("line").getAsString() : "";
         if (line.isEmpty() || server == null) {
             return;
         }
         Component component = LegacyText.parse(line);
         server.getPlayerList().broadcastSystemMessage(component, false);
+    }
+
+    /**
+     * 把 AstrBot 下发的结构化部件渲染成组件并广播（与 Paper 端 renderParts 同口径）。
+     * · text 部件：legacy 解析（带 § 码）· items 部件：蓝色 + show_item 悬停（count 夹 99）
+     */
+    private void renderParts(com.google.gson.JsonArray parts) {
+        net.minecraft.network.chat.MutableComponent out = Component.empty();
+        for (com.google.gson.JsonElement pe : parts) {
+            if (!pe.isJsonObject()) {
+                continue;
+            }
+            JsonObject p = pe.getAsJsonObject();
+            String type = p.has("type") ? p.get("type").getAsString() : "text";
+            if ("items".equals(type) && p.has("items")) {
+                for (com.google.gson.JsonElement ie : p.getAsJsonArray("items")) {
+                    JsonObject it = ie.getAsJsonObject();
+                    int n0 = it.has("count") ? it.get("count").getAsInt() : 1;
+                    // 条目可能没有 id（槽位寻址出来的）—— 只能当纯文本，别 NPE
+                    if (!it.has("id")) {
+                        String only = it.has("name") ? it.get("name").getAsString() : "?";
+                        out.append(Component.literal("⌜" + only + "⌝ ×" + n0)
+                                .withStyle(net.minecraft.ChatFormatting.AQUA));
+                        continue;
+                    }
+                    String id = it.get("id").getAsString();
+                    int n = n0;
+                    String name = it.has("name") && !it.get("name").getAsString().isEmpty()
+                            ? it.get("name").getAsString() : id;
+                    String comps = it.has("components") && !it.get("components").isJsonNull()
+                            ? it.get("components").getAsString() : "";
+                    String full = id.contains(":") ? id : "minecraft:" + id;
+                    net.minecraft.world.item.ItemStack show = comps.isEmpty()
+                            ? net.minecraft.world.item.ItemStack.EMPTY
+                            : (itemTool != null ? itemTool.buildItem(full, 1, comps)
+                                    : net.minecraft.world.item.ItemStack.EMPTY);
+                    if (show.isEmpty()) {
+                        show = itemTool != null ? itemTool.buildItem(full,
+                                Math.max(1, Math.min(n, 99)), "")
+                                : net.minecraft.world.item.ItemStack.EMPTY;
+                    }
+                    net.minecraft.network.chat.MutableComponent chunk =
+                            Component.literal("⌜" + name + "⌝ ×" + n)
+                                    .withStyle(net.minecraft.ChatFormatting.AQUA);
+                    if (!show.isEmpty()) {
+                        final net.minecraft.world.item.ItemStack fshow = show;
+                        chunk = chunk.withStyle(style -> style
+                                .withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowItem(
+                                        new net.minecraft.world.item.ItemStackTemplate(
+                                                fshow.getItem().builtInRegistryHolder(),
+                                                Math.max(1, Math.min(n, 99)),
+                                                fshow.getComponentsPatch()))));
+                    }
+                    out.append(chunk);
+                }
+            } else if (p.has("text")) {
+                out.append(LegacyText.parse(p.get("text").getAsString()));
+            }
+        }
+        final Component rendered = out;
+        mainThread.execute(() -> server.getPlayerList().broadcastSystemMessage(rendered, false));
     }
 
     /**
@@ -285,6 +380,37 @@ public class NetherLinkFabric implements ModInitializer {
             // （Paper 端踩过：那边曾无条件报 ok=true）。
             sendCommandResult(id, false, "执行异常: " + e.getMessage());
         }
+    }
+
+    /** 供服务层用的主线程调度（ActionFlow / InspectFlow 转发用）。 */
+    void runOnMainThread(Runnable r) {
+        mainThread.execute(r);
+    }
+
+    /** 按名字查在线玩家（mixin 反查点击者用）。 */
+    public ServerPlayer findPlayer(String name) {
+        return server == null ? null : server.getPlayerList().getPlayerByName(name);
+    }
+
+    /** CustomClickMixin 转来（已在主线程）：把点击交给 ActionFlow。 */
+    public void dispatchCustomClick(ServerPlayer player, net.minecraft.resources.Identifier id,
+                                     java.util.Optional<net.minecraft.nbt.Tag> payload) {
+        if (actionFlow == null) {
+            return;
+        }
+        actionFlow.onClick(player, id, payload);
+    }
+
+    /** 把配置里的菜单键套到 MenuFlow（键缺失用默认值，与 Paper 端口径一致）。 */
+    private void applyMenuConfig(NetherLinkConfig cfg) {
+        MenuFlow.MenuConfig m = menuFlow.config();
+        m.enable = cfg.menuEnable;
+        m.triggers = parsePrefixes(cfg.menuTriggersRaw);
+        if (!cfg.menuTitle.isEmpty()) m.title = cfg.menuTitle;
+        if (!cfg.menuItemTeleportPlayer.isEmpty()) m.itemTeleportPlayer = cfg.menuItemTeleportPlayer;
+        if (!cfg.menuItemTeleportDeath.isEmpty()) m.itemTeleportDeath = cfg.menuItemTeleportDeath;
+        if (!cfg.menuItemShowItem.isEmpty()) m.itemShowItem = cfg.menuItemShowItem;
+        m.cooldownSec = cfg.menuCooldownSec;
     }
 
     private void sendCommandResult(String id, boolean ok, String output) {

@@ -4,7 +4,8 @@
   "package": "dev.eyf.netherlink.fabric.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "PlayerAdvancementsMixin"
+    "PlayerAdvancementsMixin",
+    "CustomClickMixin"
   ],
   "injectors": {
     "defaultRequire": 1

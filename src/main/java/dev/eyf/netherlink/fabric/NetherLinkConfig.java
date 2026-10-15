@@ -33,6 +33,14 @@ public final class NetherLinkConfig {
     public static final String DEFAULT_TOKEN = "change-me";
     public static final String DEFAULT_SERVER_NAME = "mc";
     public static final String DEFAULT_WAKE_PREFIXES = "ai,助手";
+    // ---- 本地菜单（与 Paper 端 config.yml 的 menu-* 键逐字对齐）----
+    public static final boolean DEFAULT_MENU_ENABLE = true;
+    public static final String DEFAULT_MENU_TRIGGERS = "菜单,menu,メニュー";
+    public static final String DEFAULT_MENU_TITLE = "✆ 菜单 ✆";
+    public static final String DEFAULT_MENU_ITEM_TP_PLAYER = "传送到玩家";
+    public static final String DEFAULT_MENU_ITEM_TP_DEATH = "传送到死亡点";
+    public static final String DEFAULT_MENU_ITEM_SHOW = "展示手上的物品";
+    public static final long DEFAULT_MENU_COOLDOWN = 3L;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -41,14 +49,31 @@ public final class NetherLinkConfig {
     public final String token;
     public final String serverName;
     public final String wakePrefixesRaw;
+    public final boolean menuEnable;
+    public final String menuTriggersRaw;
+    public final String menuTitle;
+    public final String menuItemTeleportPlayer;
+    public final String menuItemTeleportDeath;
+    public final String menuItemShowItem;
+    public final long menuCooldownSec;
 
-    private NetherLinkConfig(String host, int port, String token,
-                             String serverName, String wakePrefixesRaw) {
+    private NetherLinkConfig(String host, int port, String token, String serverName,
+                             String wakePrefixesRaw, boolean menuEnable, String menuTriggersRaw,
+                             String menuTitle, String menuItemTeleportPlayer,
+                             String menuItemTeleportDeath, String menuItemShowItem,
+                             long menuCooldownSec) {
         this.host = host;
         this.port = port;
         this.token = token;
         this.serverName = serverName;
         this.wakePrefixesRaw = wakePrefixesRaw;
+        this.menuEnable = menuEnable;
+        this.menuTriggersRaw = menuTriggersRaw;
+        this.menuTitle = menuTitle;
+        this.menuItemTeleportPlayer = menuItemTeleportPlayer;
+        this.menuItemTeleportDeath = menuItemTeleportDeath;
+        this.menuItemShowItem = menuItemShowItem;
+        this.menuCooldownSec = menuCooldownSec;
     }
 
     /**
@@ -81,7 +106,14 @@ public final class NetherLinkConfig {
                 num(json, "port", DEFAULT_PORT),
                 str(json, "token", DEFAULT_TOKEN),
                 str(json, "server-name", DEFAULT_SERVER_NAME),
-                str(json, "wake-prefixes", DEFAULT_WAKE_PREFIXES)
+                str(json, "wake-prefixes", DEFAULT_WAKE_PREFIXES),
+                bool(json, "menu-enable", DEFAULT_MENU_ENABLE),
+                str(json, "menu-triggers", DEFAULT_MENU_TRIGGERS),
+                str(json, "menu-title", DEFAULT_MENU_TITLE),
+                str(json, "menu-item-teleport-player", DEFAULT_MENU_ITEM_TP_PLAYER),
+                str(json, "menu-item-teleport-death", DEFAULT_MENU_ITEM_TP_DEATH),
+                str(json, "menu-item-show-item", DEFAULT_MENU_ITEM_SHOW),
+                num(json, "menu-teleport-cooldown", (int) DEFAULT_MENU_COOLDOWN)
         );
     }
 
@@ -104,6 +136,16 @@ public final class NetherLinkConfig {
             o.addProperty("_comment_wake_prefixes", "游戏内机器人唤醒词（逗号分隔），"
                     + "与 AstrBot 侧 mc_wake_prefixes 保持一致");
             o.addProperty("wake-prefixes", DEFAULT_WAKE_PREFIXES);
+            o.addProperty("_comment_menu", "本地菜单（全在 MC 端完成，不经 AstrBot、不消耗好感）。"
+                    + "menu-triggers 是触发词（整条消息相等才触发）。"
+                    + "menu-teleport-cooldown 是传送与展示共用的冷却秒数（0 = 无冷却）。");
+            o.addProperty("menu-enable", DEFAULT_MENU_ENABLE);
+            o.addProperty("menu-triggers", DEFAULT_MENU_TRIGGERS);
+            o.addProperty("menu-title", DEFAULT_MENU_TITLE);
+            o.addProperty("menu-item-teleport-player", DEFAULT_MENU_ITEM_TP_PLAYER);
+            o.addProperty("menu-item-teleport-death", DEFAULT_MENU_ITEM_TP_DEATH);
+            o.addProperty("menu-item-show-item", DEFAULT_MENU_ITEM_SHOW);
+            o.addProperty("menu-teleport-cooldown", DEFAULT_MENU_COOLDOWN);
             Files.writeString(file, GSON.toJson(o) + "\n", StandardCharsets.UTF_8);
             NetherLinkFabric.LOGGER.info("已生成默认配置: {}", file);
         } catch (IOException e) {
@@ -121,6 +163,18 @@ public final class NetherLinkConfig {
             return v.isBlank() ? def : v;
         } catch (Exception e) {
             NetherLinkFabric.LOGGER.warn("配置项 {} 类型不对，已回退默认值", key);
+            return def;
+        }
+    }
+
+    private static boolean bool(JsonObject o, String key, boolean def) {
+        if (o == null || !o.has(key)) {
+            return def;
+        }
+        try {
+            return o.get(key).getAsBoolean();
+        } catch (Exception e) {
+            NetherLinkFabric.LOGGER.warn("配置项 {} 不是布尔，已回退默认值 {}", key, def);
             return def;
         }
     }
